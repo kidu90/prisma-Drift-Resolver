@@ -32,8 +32,6 @@ def get_prisma_drift(
 	db_url: str = "",
 ) -> AcquisitionResult:
 	"""Run `prisma migrate diff --script` and return raw SQL output.
-
-	
 	"""
 
 	cli_command = "npx.cmd" if sys.platform.startswith("win") else "npx"
@@ -120,7 +118,6 @@ if __name__ == "__main__":
 
 	result = get_prisma_drift(schema_path="./prisma/schema.prisma", db_url=database_url)
 
-	# Print all fields explicitly so CI logs remain easy to scan.
 	print("\n[ACQUISITION] Result")
 	print(f"  raw_sql:\n{result.raw_sql}")
 	print(f"  has_drift: {result.has_drift}")
