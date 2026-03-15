@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 
 class DriftClassification(str, Enum):
-    """Supported safety classifications for detected drift."""
 
     SAFE = "SAFE"
     UNSAFE = "UNSAFE"
@@ -15,8 +14,7 @@ class DriftClassification(str, Enum):
 
 
 class DriftItem(BaseModel):
-    """Represents a single SQL statement detected during drift analysis."""
-
+#Represents a single SQL statement detected during drift analysis.
     sql: str = Field(description="The raw SQL statement.")
     statement_type: str = Field(description="The normalized statement type.")
     table_name: str | None = Field(default=None, description="The affected table, if any.")

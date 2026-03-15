@@ -1,4 +1,4 @@
-"""Public module exports for drift-resolver processing modules."""
+#Public module exports for drift-resolver processing modules.
 
 from .acquisition import AcquisitionResult, get_prisma_drift
 

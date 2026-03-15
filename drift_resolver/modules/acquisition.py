@@ -18,8 +18,7 @@ class AcquisitionResult:
 
 
 def is_empty_diff(sql_output: str) -> bool:
-	"""Return True when the SQL output has no executable statements."""
-
+#Return True when the SQL output has no executable statements.
 	for line in sql_output.splitlines():
 		stripped = line.strip()
 		if stripped and not stripped.startswith("--"):
@@ -31,9 +30,7 @@ def get_prisma_drift(
 	schema_path: str = "./prisma/schema.prisma",
 	db_url: str = "",
 ) -> AcquisitionResult:
-	"""Run `prisma migrate diff --script` and return raw SQL output.
-	"""
-
+#Run `prisma migrate diff --script` and return raw SQL output.
 	cli_command = "npx.cmd" if sys.platform.startswith("win") else "npx"
 	command = [
 		cli_command,
@@ -106,7 +103,6 @@ def get_prisma_drift(
 
 
 if __name__ == "__main__":
-	"""Allow direct module execution for quick local smoke testing."""
 
 	import os
 
