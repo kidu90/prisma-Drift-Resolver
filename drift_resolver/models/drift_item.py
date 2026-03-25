@@ -14,7 +14,6 @@ class DriftClassification(str, Enum):
 
 
 class DriftItem(BaseModel):
-#Represents a single SQL statement detected during drift analysis.
     sql: str = Field(description="The raw SQL statement.")
     statement_type: str = Field(description="The normalized statement type.")
     table_name: str | None = Field(default=None, description="The affected table, if any.")
