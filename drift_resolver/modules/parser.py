@@ -39,7 +39,6 @@ def _extract_table_name(node: exp.Expression) -> Optional[str]:
 def _extract_column_name(node: exp.Expression) -> Optional[str]:
 	"""Extract a column name by preferring ColumnDef, then Column nodes."""
 
-	# For ADD COLUMN, sqlglot uses ColumnDef
 	column_def = node.find(exp.ColumnDef)
 	if column_def and column_def.name:
 		return column_def.name
@@ -61,7 +60,6 @@ def _parse_single_statement(node: exp.Expression) -> Optional[DriftItem]:
 	except Exception:
 		normalized_sql = str(node)
 
-	# sqlglot models ALTER TABLE 
 	if isinstance(node, exp.Alter) and str(node.args.get("kind", "")).upper() == "TABLE":
 		table_name = _extract_table_name(node)
 		actions = node.args.get("actions") or []
@@ -125,7 +123,6 @@ def _parse_single_statement(node: exp.Expression) -> Optional[DriftItem]:
 			first_expr = expressions[0]
 			table_name = getattr(first_expr, "name", None)
 
-		# For most Prisma drop statements, sqlglot stores the target in `this`.
 		if not table_name:
 			table_name = _extract_table_name(node)
 
