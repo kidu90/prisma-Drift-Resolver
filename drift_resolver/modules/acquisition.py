@@ -1,5 +1,4 @@
 
-
 from __future__ import annotations
 
 import subprocess
@@ -18,7 +17,6 @@ class AcquisitionResult:
 
 
 def is_empty_diff(sql_output: str) -> bool:
-#Return True when the SQL output has no executable statements.
 	for line in sql_output.splitlines():
 		stripped = line.strip()
 		if stripped and not stripped.startswith("--"):
@@ -71,7 +69,6 @@ def get_prisma_drift(
 	stderr = (completed.stderr or "").strip()
 
 	if completed.returncode != 0:
-		# Prisma reports DB connectivity and CLI/runtime issues in stderr.
 		details = stderr if stderr else "Prisma migrate diff failed without stderr output."
 		error_message = f"Prisma migrate diff failed (exit code {completed.returncode}): {details}"
 		print(f"[ACQUISITION] ERROR: {error_message}")
