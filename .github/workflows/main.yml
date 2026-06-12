@@ -38,7 +38,7 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Prisma CLI
+      - name: Install Node dependencies
         run: npm install
 
       - name: Setup Python 3.11
@@ -49,16 +49,38 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r drift_resolver/requirements.txt
 
+      - name: Show migrations that will be applied
+        run: ls -la prisma/migrations/
+
       - name: Apply baseline Prisma migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
-      - name: Simulate drift
+      - name: Confirm migration status
+        run: npx prisma migrate status
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+
+      - name: Confirm User table exists
+        run: |
+          docker exec $(docker ps -q --filter "ancestor=postgres:15") \
+            psql -U testuser -d testdb -c '\d "User"' || \
+          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
+            -c '\d "User"'
+        continue-on-error: true
+
+      - name: Simulate safe drift
         run: |
           PGPASSWORD=testpass psql \
             -h localhost -U testuser -d testdb \
             -c 'ALTER TABLE "User" ADD COLUMN "drift_test_col" TEXT;'
+
+      - name: Confirm drift exists
+        run: |
+          PGPASSWORD=testpass psql \
+            -h localhost -U testuser -d testdb \
+            -c '\d "User"'
 
       - name: Run drift-resolver layer
         run: |
@@ -71,9 +93,20 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           AUTO_APPROVE: 'true'
 
+      - name: Confirm drift was resolved
+        run: |
+          npx prisma migrate status
+          PGPASSWORD=testpass psql \
+            -h localhost -U testuser -d testdb \
+            -c 'SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at DESC LIMIT 5;'
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+
       - name: Upload drift report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: drift-report
-          path: drift-report.json
+          path: |
+            drift-report.json
+            drift-report.html
