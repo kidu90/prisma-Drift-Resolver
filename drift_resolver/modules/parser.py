@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 import sys
 from typing import Optional
@@ -26,6 +27,28 @@ def clean_sql_input(raw_sql: str) -> str:
 			continue
 		cleaned_lines.append(line)
 	return "\n".join(cleaned_lines).strip()
+
+
+def split_compound_alter(sql: str) -> list[str]:
+	"""Split multi-action ALTER TABLE statements into single-action statements."""
+
+	sql = sql.strip().rstrip(";")
+	if not sql.upper().startswith("ALTER TABLE"):
+		return [sql + ";"]
+
+	table_match = re.match(r'ALTER\s+TABLE\s+((?:"[^"]+"|\w+))\s+', sql, re.IGNORECASE)
+	if not table_match:
+		return [sql + ";"]
+
+	table_name = table_match.group(1)
+	prefix = f"ALTER TABLE {table_name} "
+	rest = sql[table_match.end():]
+	action_keywords = r"(?:ADD|DROP|ALTER|RENAME|MODIFY|CHANGE)"
+	parts = re.split(rf",\s*(?={action_keywords}\b)", rest, flags=re.IGNORECASE)
+	if len(parts) == 1:
+		return [sql + ";"]
+
+	return [f"{prefix}{part.strip()};" for part in parts if part.strip()]
 
 
 def _extract_table_name(node: exp.Expression) -> Optional[str]:
@@ -164,28 +187,39 @@ def parse_drift_sql(raw_sql: str) -> list[DriftItem]:
 		print("[PARSER] Successfully parsed 0 DriftItems.")
 		return []
 
-	try:
-		nodes = sqlglot.parse(cleaned_sql, dialect="postgres")
-	except Exception as exc:
-		print(f"[PARSER] Failed to parse SQL diff: {exc}")
-		print("[PARSER] Successfully parsed 0 DriftItems.")
-		return []
+	individual_statements: list[str] = []
+	for chunk in cleaned_sql.split(";"):
+		chunk = chunk.strip()
+		if not chunk:
+			continue
+		individual_statements.extend(split_compound_alter(chunk))
 
-	print(f"[PARSER] Parsing {len(nodes)} statements from diff output.")
+	print(f"[PARSER] Parsing {len(individual_statements)} statements from diff output.")
 
 	parsed_items: list[DriftItem] = []
-	for node in nodes:
-		if node is None:
+	for stmt_sql in individual_statements:
+		stmt_sql = stmt_sql.strip()
+		if not stmt_sql:
 			continue
 
 		try:
-			item = _parse_single_statement(node)
+			nodes = sqlglot.parse(stmt_sql, dialect="postgres")
 		except Exception as exc:
-			print(f"[PARSER] Failed to parse statement: {exc}")
+			print(f"[PARSER] Failed to parse SQL statement: {exc}")
 			continue
 
-		if item is not None:
-			parsed_items.append(item)
+		for node in nodes:
+			if node is None:
+				continue
+
+			try:
+				item = _parse_single_statement(node)
+			except Exception as exc:
+				print(f"[PARSER] Failed to parse statement: {exc}")
+				continue
+
+			if item is not None:
+				parsed_items.append(item)
 
 	print(f"[PARSER] Successfully parsed {len(parsed_items)} DriftItems.")
 	return parsed_items

@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from drift_resolver.models.drift_item import DriftClassification
-from drift_resolver.modules.parser import parse_drift_sql
+from drift_resolver.modules.classifier import classify_drift_items
+from drift_resolver.modules.parser import parse_drift_sql, split_compound_alter
 
 
 def test_parse_add_nullable_column() -> None:
@@ -59,6 +60,42 @@ def test_parse_create_index() -> None:
 	result = parse_drift_sql(sql)
 
 	assert result[0].statement_type == "CreateIndex"
+
+
+def test_split_compound_alter_drop_and_add() -> None:
+	"""Compound ALTER TABLE statements should split into single actions."""
+
+	sql = 'ALTER TABLE "User" DROP COLUMN "old_col", ADD COLUMN "new_col" TEXT;'
+	result = split_compound_alter(sql)
+
+	assert len(result) == 2
+	assert "DROP COLUMN" in result[0]
+	assert "ADD COLUMN" in result[1]
+	assert all('ALTER TABLE "User"' in statement for statement in result)
+
+
+def test_compound_alter_classifies_correctly() -> None:
+	"""Compound ALTER TABLE statements should classify each action separately."""
+
+	sql = '''ALTER TABLE "User" DROP COLUMN "old_col",
+	         ADD COLUMN "new_col" TEXT;'''
+	items = parse_drift_sql(sql)
+	classify_drift_items(items)
+
+	assert len(items) == 2
+	drop_item = next(item for item in items if "DROP" in item.sql.upper())
+	add_item = next(item for item in items if "ADD" in item.sql.upper())
+	assert drop_item.classification.value == "UNSAFE"
+	assert add_item.classification.value == "SAFE"
+
+
+def test_single_alter_not_split() -> None:
+	"""Single ALTER TABLE statements should remain intact."""
+
+	sql = 'ALTER TABLE "User" ADD COLUMN "bio" TEXT;'
+	result = split_compound_alter(sql)
+
+	assert len(result) == 1
 
 
 def test_table_name_preserves_case() -> None:

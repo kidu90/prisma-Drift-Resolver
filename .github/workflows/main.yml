@@ -10,6 +10,9 @@ permissions:
   pull-requests: write
   issues: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   drift-check:
     runs-on: ubuntu-latest
@@ -33,10 +36,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 18
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install Node dependencies
         run: npm install
@@ -49,8 +52,22 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r drift_resolver/requirements.txt
 
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "Waiting for postgres..."
+          for i in {1..10}; do
+            PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
+              -c 'SELECT 1;' && echo "PostgreSQL ready." && break
+            echo "Attempt $i failed, retrying in 3s..."
+            sleep 3
+          done
+
       - name: Show migrations that will be applied
-        run: ls -la prisma/migrations/
+        run: |
+          echo "=== Migrations in repo ==="
+          ls -la prisma/migrations/
+          echo "=== schema.prisma ==="
+          cat prisma/schema.prisma
 
       - name: Apply baseline Prisma migrations
         run: npx prisma migrate deploy
@@ -64,23 +81,30 @@ jobs:
 
       - name: Confirm User table exists
         run: |
-          docker exec $(docker ps -q --filter "ancestor=postgres:15") \
-            psql -U testuser -d testdb -c '\d "User"' || \
+          echo "=== User table structure ==="
           PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
             -c '\d "User"'
         continue-on-error: true
 
-      - name: Simulate safe drift
+      - name: Simulate safe drift — add nullable column
         run: |
-          PGPASSWORD=testpass psql \
-            -h localhost -U testuser -d testdb \
-            -c 'ALTER TABLE "User" ADD COLUMN "drift_test_col" TEXT;'
+          echo "Introducing safe drift: adding nullable column bio..."
+          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
+            -c 'ALTER TABLE "User" ADD COLUMN "bio" TEXT;'
+          echo "Drift introduced successfully."
 
-      - name: Confirm drift exists
+      - name: Confirm drift exists before running tool
         run: |
-          PGPASSWORD=testpass psql \
-            -h localhost -U testuser -d testdb \
+          echo "=== User table AFTER drift (bio column should appear) ==="
+          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
             -c '\d "User"'
+          echo "=== Running prisma migrate diff to confirm drift ==="
+          npx prisma migrate diff \
+            --from-url "postgresql://testuser:testpass@localhost:5432/testdb" \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --script || true
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
       - name: Run drift-resolver layer
         run: |
@@ -89,20 +113,31 @@ jobs:
             --db-url "postgresql://testuser:testpass@localhost:5432/testdb"
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
-          DRIFT_MIGRATIONS_DIR: ${{ runner.temp }}/drift-migrations
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           AUTO_APPROVE: 'true'
 
       - name: Confirm drift was resolved
+        if: success()
         run: |
+          echo "=== Migration status after resolution ==="
           npx prisma migrate status
-          PGPASSWORD=testpass psql \
-            -h localhost -U testuser -d testdb \
+          echo ""
+          echo "=== Last 5 entries in _prisma_migrations ==="
+          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
             -c 'SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at DESC LIMIT 5;'
+          echo ""
+          echo "=== User table structure after resolution ==="
+          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
+            -c '\d "User"'
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
-          DRIFT_MIGRATIONS_DIR: ${{ runner.temp }}/drift-migrations
+
+      - name: Show drift report summary
+        if: always()
+        run: |
+          echo "=== drift-report.json ==="
+          cat drift-report.json 2>/dev/null || echo "No report generated."
 
       - name: Clean up generated drift migrations
         if: always()
