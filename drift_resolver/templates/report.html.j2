@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Drift Resolver Report</title>
+	<style>
+		:root {
+			color-scheme: dark;
+			--bg: #0a0e17;
+			--panel: #11182a;
+			--panel-2: #0f1524;
+			--border: #243149;
+			--text: #e7ecf5;
+			--muted: #9aa7bd;
+			--safe: rgba(34, 197, 94, 0.12);
+			--safe-border: rgba(34, 197, 94, 0.35);
+			--unsafe: rgba(239, 68, 68, 0.12);
+			--unsafe-border: rgba(239, 68, 68, 0.35);
+		}
+
+		* { box-sizing: border-box; }
+
+		body {
+			margin: 0;
+			background:
+				radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 28%),
+				radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 24%),
+				var(--bg);
+			color: var(--text);
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			line-height: 1.5;
+		}
+
+		.container {
+			width: min(1280px, calc(100% - 32px));
+			margin: 0 auto;
+			padding: 32px 0 48px;
+		}
+
+		.hero {
+			background: linear-gradient(180deg, rgba(17, 24, 42, 0.96), rgba(15, 21, 36, 0.96));
+			border: 1px solid var(--border);
+			border-radius: 24px;
+			padding: 28px;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+			position: relative;
+			overflow: hidden;
+		}
+
+		.hero::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+			pointer-events: none;
+		}
+
+		.title {
+			margin: 0 0 8px;
+			font-size: clamp(2rem, 4vw, 3.5rem);
+			letter-spacing: -0.04em;
+		}
+
+		.meta {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px 20px;
+			color: var(--muted);
+			font-size: 0.95rem;
+		}
+
+		.badge {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 0.45rem 0.8rem;
+			border-radius: 999px;
+			font-weight: 700;
+			font-size: 0.82rem;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+			border: 1px solid transparent;
+			white-space: nowrap;
+		}
+
+		.badge.resolved { background: rgba(34, 197, 94, 0.14); color: #86efac; border-color: rgba(34, 197, 94, 0.35); }
+		.badge.unsafe_detected { background: rgba(239, 68, 68, 0.14); color: #fca5a5; border-color: rgba(239, 68, 68, 0.35); }
+		.badge.approval_pending { background: rgba(245, 158, 11, 0.16); color: #fcd34d; border-color: rgba(245, 158, 11, 0.35); }
+		.badge.execution_failed { background: rgba(239, 68, 68, 0.14); color: #fca5a5; border-color: rgba(239, 68, 68, 0.35); }
+		.badge.no_drift { background: rgba(56, 189, 248, 0.14); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.35); }
+		.badge.partial { background: rgba(168, 85, 247, 0.14); color: #d8b4fe; border-color: rgba(168, 85, 247, 0.35); }
+
+		.summary {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 16px;
+			margin: 20px 0 28px;
+		}
+
+		.card {
+			background: linear-gradient(180deg, rgba(17, 24, 42, 0.88), rgba(15, 21, 36, 0.88));
+			border: 1px solid var(--border);
+			border-radius: 20px;
+			padding: 20px;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+		}
+
+		.card-label {
+			color: var(--muted);
+			font-size: 0.9rem;
+			margin-bottom: 10px;
+		}
+
+		.card-value {
+			font-size: 2rem;
+			font-weight: 800;
+			letter-spacing: -0.04em;
+		}
+
+		.section {
+			margin-top: 24px;
+			background: rgba(17, 24, 42, 0.82);
+			border: 1px solid var(--border);
+			border-radius: 22px;
+			overflow: hidden;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+		}
+
+		.section-header {
+			padding: 18px 22px;
+			border-bottom: 1px solid var(--border);
+			font-size: 1.15rem;
+			font-weight: 700;
+			letter-spacing: -0.02em;
+		}
+
+		.section-body {
+			padding: 20px 22px 24px;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			table-layout: fixed;
+		}
+
+		th, td {
+			border-bottom: 1px solid rgba(36, 49, 73, 0.85);
+			padding: 14px 12px;
+			vertical-align: top;
+			text-align: left;
+			font-size: 0.92rem;
+			word-wrap: break-word;
+		}
+
+		th {
+			color: var(--muted);
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+		}
+
+		tbody tr.safe-row { background: var(--safe); }
+		tbody tr.safe-row td:first-child { border-left: 4px solid var(--safe-border); }
+		tbody tr.unsafe-row { background: var(--unsafe); }
+		tbody tr.unsafe-row td:first-child { border-left: 4px solid var(--unsafe-border); }
+
+		.mono {
+			font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+			font-size: 0.88rem;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			display: inline-block;
+			max-width: 100%;
+			vertical-align: top;
+		}
+
+		.badge-inline {
+			display: inline-flex;
+			align-items: center;
+			padding: 0.25rem 0.6rem;
+			border-radius: 999px;
+			font-size: 0.76rem;
+			font-weight: 700;
+			letter-spacing: 0.03em;
+		}
+
+		.badge-inline.safe { background: rgba(34, 197, 94, 0.12); color: #86efac; }
+		.badge-inline.unsafe { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
+
+		.warning {
+			border: 1px solid rgba(239, 68, 68, 0.35);
+			background: rgba(239, 68, 68, 0.12);
+			color: #fecaca;
+			padding: 18px 20px;
+			border-radius: 18px;
+			margin-bottom: 18px;
+		}
+
+		.unsafe-list {
+			display: grid;
+			gap: 14px;
+		}
+
+		.unsafe-item {
+			border: 1px solid rgba(239, 68, 68, 0.2);
+			background: rgba(15, 21, 36, 0.9);
+			border-radius: 16px;
+			padding: 16px;
+		}
+
+		.unsafe-item h4 {
+			margin: 0 0 8px;
+			font-size: 1rem;
+		}
+
+		.unsafe-item p {
+			margin: 8px 0;
+			color: var(--muted);
+		}
+
+		pre {
+			margin: 10px 0 0;
+			padding: 14px;
+			border-radius: 14px;
+			background: #070b12;
+			border: 1px solid rgba(36, 49, 73, 0.9);
+			color: #dbeafe;
+			overflow-x: auto;
+			font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+			font-size: 0.85rem;
+			line-height: 1.6;
+		}
+
+		.details-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 16px;
+		}
+
+		.detail {
+			border: 1px solid rgba(36, 49, 73, 0.9);
+			border-radius: 16px;
+			padding: 16px;
+			background: rgba(15, 21, 36, 0.85);
+		}
+
+		.detail-label {
+			color: var(--muted);
+			font-size: 0.82rem;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			margin-bottom: 8px;
+		}
+
+		.detail-value {
+			font-size: 1rem;
+			font-weight: 600;
+			word-break: break-word;
+		}
+
+		footer {
+			margin-top: 24px;
+			color: var(--muted);
+			text-align: center;
+			padding: 10px 0 0;
+			font-size: 0.9rem;
+		}
+
+		@media (max-width: 1100px) {
+			.summary, .details-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			table { table-layout: auto; }
+		}
+
+		@media (max-width: 720px) {
+			.container { width: min(100% - 20px, 1280px); padding: 16px 0 32px; }
+			.summary, .details-grid { grid-template-columns: 1fr; }
+			.hero { padding: 22px; }
+			.section-body { padding: 16px; }
+			th, td { padding: 12px 8px; }
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header class="hero">
+			<h1 class="title">Drift Resolver Report</h1>
+			<div class="meta">
+				<span>Generated at {{ report.generated_at }}</span>
+				<span>Run ID {{ report.run_id }}</span>
+				<span class="badge {{ report.pipeline_outcome }}">{{ report.pipeline_outcome }}</span>
+			</div>
+		</header>
+
+		<section class="summary" aria-label="Summary cards">
+			<article class="card">
+				<div class="card-label">Total Drift Items found</div>
+				<div class="card-value">{{ report.total_items }}</div>
+			</article>
+			<article class="card">
+				<div class="card-label">Safe (auto-resolved)</div>
+				<div class="card-value">{{ report.safe_count }}</div>
+			</article>
+			<article class="card">
+				<div class="card-label">Unsafe (manual required)</div>
+				<div class="card-value">{{ report.unsafe_count }}</div>
+			</article>
+			<article class="card">
+				<div class="card-label">Execution status</div>
+				<div class="card-value">
+					{% if report.execution_success is none %}
+						Not run
+					{% elif report.execution_success %}
+						Succeeded
+					{% else %}
+						Failed
+					{% endif %}
+				</div>
+			</article>
+		</section>
+
+		<section class="section">
+			<div class="section-header">Drift Items</div>
+			<div class="section-body">
+				<table>
+					<thead>
+						<tr>
+							<th style="width: 4rem;">#</th>
+							<th style="width: 12rem;">Table</th>
+							<th style="width: 10rem;">Type</th>
+							<th style="width: 10rem;">Classification</th>
+							<th>Reason</th>
+							<th style="width: 18rem;">SQL</th>
+							<th style="width: 18rem;">Rollback</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for item in report.all_items %}
+						<tr class="{% if item.classification == 'SAFE' %}safe-row{% elif item.classification == 'UNSAFE' %}unsafe-row{% endif %}">
+							<td>{{ loop.index }}</td>
+							<td>{{ item.table_name or '-' }}</td>
+							<td>{{ item.statement_type or '-' }}</td>
+							<td>
+								{% if item.classification == 'SAFE' %}
+									<span class="badge-inline safe">SAFE</span>
+								{% elif item.classification == 'UNSAFE' %}
+									<span class="badge-inline unsafe">UNSAFE</span>
+								{% else %}
+									{{ item.classification or '-' }}
+								{% endif %}
+							</td>
+							<td>{{ item.reason or '-' }}</td>
+							<td><span class="mono" title="{{ item.sql }}">{{ item.sql[:60] ~ '...' if item.sql and item.sql|length > 60 else item.sql }}</span></td>
+							<td><span class="mono" title="{{ item.rollback_sql or '-' }}">{{ item.rollback_sql or '-' }}</span></td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</section>
+
+		{% if report.unsafe_count > 0 %}
+		<section class="section">
+			<div class="section-header">Unsafe Items</div>
+			<div class="section-body">
+				<div class="warning">
+					These changes require manual migration. Create a new migration file and apply carefully.
+				</div>
+				<div class="unsafe-list">
+					{% for item in report.unsafe_items_detail %}
+					<article class="unsafe-item">
+						<h4>{{ item.table_name or 'Unknown table' }} - {{ item.statement_type or 'Unknown type' }}</h4>
+						<p><strong>Reason:</strong> {{ item.reason or '-' }}</p>
+						<p><strong>SQL:</strong></p>
+						<pre>{{ item.sql }}</pre>
+					</article>
+					{% endfor %}
+				</div>
+			</div>
+		</section>
+		{% endif %}
+
+		{% if report.migration_name is not none %}
+		<section class="section">
+			<div class="section-header">Migration Details</div>
+			<div class="section-body">
+				<div class="details-grid">
+					<div class="detail">
+						<div class="detail-label">Migration name applied</div>
+						<div class="detail-value">{{ report.migration_name }}</div>
+					</div>
+					<div class="detail">
+						<div class="detail-label">Execution status</div>
+						<div class="detail-value">
+							{% if report.execution_success %}
+								Successful
+							{% elif report.execution_success is none %}
+								Not run
+							{% else %}
+								Failed
+							{% endif %}
+						</div>
+					</div>
+					<div class="detail">
+						<div class="detail-label">Timestamp applied</div>
+						<div class="detail-value">{{ report.generated_at }}</div>
+					</div>
+				</div>
+			</div>
+		</section>
+		{% endif %}
+
+		<footer>Generated by drift-resolver | CB011943 Masha Kidurangi</footer>
+	</div>
+</body>
+</html>
