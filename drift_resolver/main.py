@@ -39,6 +39,24 @@ def _post_final_comment(report: DriftReport) -> None:
         post_result_comment(report, pr_number)
 
 
+def _resolve_migrations_dir(config: dict | None) -> str:
+    """Choose the migrations directory, preferring CI overrides when present."""
+
+    if os.environ.get("DRIFT_MIGRATIONS_DIR"):
+        return os.environ["DRIFT_MIGRATIONS_DIR"]
+
+    if config and config.get("settings", {}).get("migrations_dir"):
+        return config["settings"]["migrations_dir"]
+
+    return "./prisma/migrations"
+
+
+def _ensure_directory(path: str) -> None:
+    """Create a directory if it does not already exist."""
+
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+
 @click.command()
 @click.option("--schema", "schema_path", default="./prisma/schema.prisma", show_default=True, help="Path to schema.prisma")
 @click.option("--db-url", "db_url", default=None, envvar="DATABASE_URL", help="Database URL")
@@ -134,7 +152,8 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
             sys.exit(1)
 
         print("[MAIN] STEP 10 — Generate migration file")
-        migrations_dir = config["settings"]["migrations_dir"] if config else "./prisma/migrations"
+        migrations_dir = _resolve_migrations_dir(config)
+        _ensure_directory(migrations_dir)
         migration_file = generate_migration(validation.validated_items, migrations_dir=migrations_dir)
 
         print("[MAIN] STEP 11 — Execute migration")

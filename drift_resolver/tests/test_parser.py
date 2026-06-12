@@ -61,6 +61,16 @@ def test_parse_create_index() -> None:
 	assert result[0].statement_type == "CreateIndex"
 
 
+def test_table_name_preserves_case() -> None:
+	"""Quoted PostgreSQL identifiers should preserve their original casing."""
+
+	sql = 'ALTER TABLE "User" ADD COLUMN "bio" TEXT;'
+	items = parse_drift_sql(sql)
+
+	assert items[0].table_name == "User"
+	assert items[0].table_name != "users"
+
+
 def test_empty_input_returns_empty_list() -> None:
 	"""Empty SQL input should return no items."""
 

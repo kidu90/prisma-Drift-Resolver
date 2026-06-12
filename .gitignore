@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 /generated/prisma
+# Auto-generated drift resolution migrations — applied at runtime
+prisma/migrations/*_drift_auto_resolve/

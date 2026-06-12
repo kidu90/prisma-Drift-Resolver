@@ -89,6 +89,7 @@ jobs:
             --db-url "postgresql://testuser:testpass@localhost:5432/testdb"
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+          DRIFT_MIGRATIONS_DIR: ${{ runner.temp }}/drift-migrations
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           AUTO_APPROVE: 'true'
@@ -101,6 +102,15 @@ jobs:
             -c 'SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at DESC LIMIT 5;'
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+          DRIFT_MIGRATIONS_DIR: ${{ runner.temp }}/drift-migrations
+
+      - name: Clean up generated drift migrations
+        if: always()
+        run: |
+          echo "Removing generated drift migrations from workspace..."
+          rm -rf prisma/migrations/*_drift_auto_resolve
+          echo "Remaining migrations:"
+          ls prisma/migrations/
 
       - name: Upload drift report
         if: always()

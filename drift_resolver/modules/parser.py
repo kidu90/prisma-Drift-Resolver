@@ -33,6 +33,10 @@ def _extract_table_name(node: exp.Expression) -> Optional[str]:
 
 	# sqlglot stores table references as Table expressions across many statement types.
 	table_expr = node.find(exp.Table)
+	if table_expr is None:
+		return None
+
+	# Preserve quoted PostgreSQL identifier casing exactly as sqlglot parsed it.
 	return table_expr.name if table_expr else None
 
 

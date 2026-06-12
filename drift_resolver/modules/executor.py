@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 import os
+import re
 import subprocess
 import sys
 
@@ -35,6 +36,15 @@ def execute_migration(migration_file: MigrationFile, db_url: str) -> ExecutionRe
 	"""Apply the generated Prisma migration to the target database."""
 
 	print(f"[EXECUTOR] Applying migration: {migration_file.folder_name}")
+	with open(migration_file.sql_path, "r", encoding="utf-8") as file_handle:
+		content = file_handle.read()
+	print("[EXECUTOR] Migration SQL to be applied:")
+	print(content)
+	print("[EXECUTOR] Verifying table names look correct...")
+	unquoted = re.findall(r'(?<!")\busers\b(?!")', content, re.IGNORECASE)
+	if unquoted:
+		print(f"[EXECUTOR] WARNING: Found potentially unquoted table reference: {unquoted}")
+		print('[EXECUTOR] Expected quoted form: "User"')
 	command = [_npx_command(), "prisma", "migrate", "deploy"]
 	env = os.environ.copy()
 	env["DATABASE_URL"] = db_url
