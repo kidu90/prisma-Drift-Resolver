@@ -1,0 +1,76 @@
+# .github/workflows/drift-check.yml
+name: Drift Resolver Test
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Prisma CLI
+        run: npm install
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r drift_resolver/requirements.txt
+
+      - name: Apply baseline Prisma migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+
+      - name: Simulate drift (add column directly to DB)
+        run: |
+          PGPASSWORD=testpass psql \
+            -h localhost -U testuser -d testdb \
+            -c 'ALTER TABLE "User" ADD COLUMN "drift_test_col" TEXT;'
+
+      - name: Run drift-resolver
+        run: |
+          python drift_resolver/main.py \
+            --schema ./prisma/schema.prisma \
+            --db-url "postgresql://testuser:testpass@localhost:5432/testdb"
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AUTO_APPROVE: 'true'
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: |
+            drift-report.json
