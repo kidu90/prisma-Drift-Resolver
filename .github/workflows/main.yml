@@ -14,9 +14,6 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   drift-check:
     runs-on: ubuntu-latest
@@ -56,26 +53,6 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r drift_resolver/requirements.txt
 
-<<<<<<< HEAD
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          echo "Waiting for postgres..."
-          for i in {1..10}; do
-            PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-              -c 'SELECT 1;' && echo "PostgreSQL ready." && break
-            echo "Attempt $i failed, retrying in 3s..."
-            sleep 3
-          done
-
-      - name: Show migrations that will be applied
-        run: |
-          echo "=== Migrations in repo ==="
-          ls -la prisma/migrations/
-          echo "=== schema.prisma ==="
-          cat prisma/schema.prisma
-
-      - name: Apply baseline Prisma migrations
-=======
       - name: Wait for PostgreSQL
         run: |
           sudo apt-get update
@@ -97,58 +74,23 @@ jobs:
           cat prisma/schema.prisma
 
       - name: Apply baseline migrations
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
-<<<<<<< HEAD
-      - name: Confirm migration status
-=======
       - name: Confirm clean baseline
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
         run: npx prisma migrate status
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
-<<<<<<< HEAD
-      - name: Confirm User table exists
-        run: |
-          echo "=== User table structure ==="
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-            -c '\d "User"'
-        continue-on-error: true
-
-      - name: Simulate safe drift — add nullable column
-        run: |
-          echo "Introducing safe drift: adding nullable column bio..."
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-            -c 'ALTER TABLE "User" ADD COLUMN "bio" TEXT;'
-          echo "Drift introduced successfully."
-
-      - name: Confirm drift exists before running tool
-        run: |
-          echo "=== User table AFTER drift (bio column should appear) ==="
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-            -c '\d "User"'
-          echo "=== Running prisma migrate diff to confirm drift ==="
-          npx prisma migrate diff \
-            --from-url "postgresql://testuser:testpass@localhost:5432/testdb" \
-            --to-schema-datamodel ./prisma/schema.prisma \
-            --script || true
-        env:
-          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
-=======
       - name: Simulate safe drift — add nullable column
         run: |
           echo "Introducing drift: schema has nullable bio; baseline DB does not."
-          echo "Diff will propose ADD COLUMN bio (SAFE). Not altering DB here —"
-          echo "that would erase the drift the resolver is meant to apply."
+          echo "Diff will propose ADD COLUMN bio (SAFE)."
           PGPASSWORD=testpass psql \
             -h localhost -U testuser -d testdb \
             -c '\d "User"'
           echo "Drift introduced."
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
 
       - name: Confirm drift exists
         run: |
@@ -178,14 +120,6 @@ jobs:
           echo "=== Migration status after resolution ==="
           npx prisma migrate status
           echo ""
-<<<<<<< HEAD
-          echo "=== Last 5 entries in _prisma_migrations ==="
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-            -c 'SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at DESC LIMIT 5;'
-          echo ""
-          echo "=== User table structure after resolution ==="
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-=======
           echo "=== Recent migration history ==="
           PGPASSWORD=testpass psql \
             -h localhost -U testuser -d testdb \
@@ -195,48 +129,25 @@ jobs:
           echo "=== User table — bio column should now exist ==="
           PGPASSWORD=testpass psql \
             -h localhost -U testuser -d testdb \
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
             -c '\d "User"'
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
-<<<<<<< HEAD
-      - name: Show drift report summary
-        if: always()
-        run: |
-          echo "=== drift-report.json ==="
-          cat drift-report.json 2>/dev/null || echo "No report generated."
-=======
       - name: Show drift report
         if: always()
         run: |
           echo "=== drift-report.json ==="
           cat drift-report.json 2>/dev/null || \
             echo "No report file found."
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
 
       - name: Clean up generated drift migrations
         if: always()
         run: |
-<<<<<<< HEAD
-          echo "Removing generated drift migrations from workspace..."
-=======
           echo "Cleaning up auto-generated migration folders..."
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
           rm -rf prisma/migrations/*_drift_auto_resolve
           echo "Remaining migrations:"
           ls prisma/migrations/
 
-<<<<<<< HEAD
-      - name: Upload drift report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: drift-report
-          path: |
-            drift-report.json
-            drift-report.html
-=======
       - name: Upload drift report as artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -246,4 +157,3 @@ jobs:
             drift-report.json
             drift-report.html
           if-no-files-found: warn
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
