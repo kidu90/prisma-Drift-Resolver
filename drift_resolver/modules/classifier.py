@@ -25,9 +25,12 @@ def classify_drift_items(items: list[DriftItem]) -> list[DriftItem]:
 	unsafe_count = sum(1 for item in items if item.classification == DriftClassification.UNSAFE)
 	unknown_count = sum(1 for item in items if item.classification == DriftClassification.UNKNOWN)
 
-	print(
-		f"[CLASSIFIER] Results: {safe_count} SAFE, {unsafe_count} UNSAFE, {unknown_count} UNKNOWN"
-	)
+	if unknown_count:
+		print(
+			f"[CLASSIFIER] Results: {safe_count} SAFE, {unsafe_count} UNSAFE, {unknown_count} UNKNOWN"
+		)
+	else:
+		print(f"[CLASSIFIER] Results: {safe_count} SAFE, {unsafe_count} UNSAFE")
 	return items
 
 

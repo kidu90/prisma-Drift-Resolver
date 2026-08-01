@@ -6,15 +6,12 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 import json
-import os
 import sys
 
-import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 try:
 	from drift_resolver.models.drift_item import DriftClassification, DriftItem
-	from drift_resolver.modules.approval import ApprovalResult
 	from drift_resolver.modules.executor import ExecutionResult
 	from drift_resolver.modules.generator import MigrationFile
 	from drift_resolver.modules.validator import ValidationResult
@@ -23,13 +20,9 @@ except ModuleNotFoundError:
 	if str(project_root) not in sys.path:
 		sys.path.insert(0, str(project_root))
 	from drift_resolver.models.drift_item import DriftClassification, DriftItem
-	from drift_resolver.modules.approval import ApprovalResult
 	from drift_resolver.modules.executor import ExecutionResult
 	from drift_resolver.modules.generator import MigrationFile
 	from drift_resolver.modules.validator import ValidationResult
-
-
-GITHUB_API_TIMEOUT_SECONDS = 10
 
 
 @dataclass
@@ -43,7 +36,6 @@ class DriftReport:
 	unsafe_count: int
 	resolved_count: int
 	rejected_count: int
-	approval_mode: str
 	migration_name: Optional[str]
 	execution_success: Optional[bool]
 	all_items: list[dict]
@@ -53,7 +45,6 @@ class DriftReport:
 
 def generate_report(
 	all_items: list[DriftItem],
-	approval_result: Optional[ApprovalResult] = None,
 	validation_result: Optional[ValidationResult] = None,
 	migration_file: Optional[MigrationFile] = None,
 	execution_result: Optional[ExecutionResult] = None,
@@ -69,12 +60,15 @@ def generate_report(
 		unsafe_count=sum(1 for item in all_items if item.classification == DriftClassification.UNSAFE),
 		resolved_count=_resolved_count(validation_result, execution_result),
 		rejected_count=len(validation_result.rejected_items) if validation_result else 0,
-		approval_mode=approval_result.mode if approval_result else "none",
 		migration_name=migration_file.folder_name if migration_file else None,
 		execution_success=execution_result.success if execution_result else None,
 		all_items=[_serialize_drift_item(item) for item in all_items],
-		unsafe_items_detail=[_serialize_drift_item(item) for item in all_items if item.classification == DriftClassification.UNSAFE],
-		pipeline_outcome=_determine_pipeline_outcome(all_items, approval_result, execution_result),
+		unsafe_items_detail=[
+			_serialize_drift_item(item)
+			for item in all_items
+			if item.classification == DriftClassification.UNSAFE
+		],
+		pipeline_outcome=_determine_pipeline_outcome(all_items, execution_result),
 	)
 
 	json_path = _write_json_report(report, report_dir)
@@ -107,7 +101,6 @@ def _resolved_count(
 
 def _determine_pipeline_outcome(
 	all_items: list[DriftItem],
-	approval_result: Optional[ApprovalResult],
 	execution_result: Optional[ExecutionResult],
 ) -> str:
 	"""Derive the pipeline outcome label from available results."""
@@ -117,9 +110,6 @@ def _determine_pipeline_outcome(
 
 	has_safe = any(item.classification == DriftClassification.SAFE for item in all_items)
 	has_unsafe = any(item.classification == DriftClassification.UNSAFE for item in all_items)
-
-	if approval_result is not None and not approval_result.approved:
-		return "approval_pending"
 
 	if has_unsafe and execution_result is None:
 		return "unsafe_detected"
@@ -178,73 +168,10 @@ def _serialize_drift_item(item: DriftItem) -> dict:
 	return data
 
 
-def post_result_comment(report: DriftReport, pr_number: str) -> None:
-	"""Post the final result comment to the GitHub PR, if configured."""
-
-	if not os.environ.get("PR_NUMBER"):
-		return
-
-	try:
-		token = os.environ.get("GITHUB_TOKEN")
-		repo = os.environ.get("GITHUB_REPOSITORY")
-		if not token or not repo:
-			print("[REPORTER] Missing GITHUB_TOKEN or GITHUB_REPOSITORY; skipping PR comment.")
-			return
-
-		url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-		headers = {
-			"Authorization": f"Bearer {token}",
-			"Accept": "application/vnd.github+json",
-		}
-		body = _build_result_comment_body(report)
-		response = requests.post(url, headers=headers, json={"body": body}, timeout=GITHUB_API_TIMEOUT_SECONDS)
-		response.raise_for_status()
-		print(f"[REPORTER] Result comment posted to PR #{pr_number}")
-	except Exception as exc:
-		print(f"[REPORTER] Failed to post result comment for PR #{pr_number}: {exc}")
-
-
-def _build_result_comment_body(report: DriftReport) -> str:
-	"""Render the markdown body for the final PR comment."""
-
-	is_success = report.pipeline_outcome in {"resolved", "no_drift"}
-	headline_emoji = "✅" if is_success else "❌"
-	if report.pipeline_outcome == "partial":
-		headline_emoji = "⚠️"
-
-	lines: list[str] = []
-	lines.append(f"## {headline_emoji} Drift Resolver — Run Complete")
-	lines.append("")
-	lines.append(f"**Outcome:** {report.pipeline_outcome}")
-	lines.append(f"**Run ID:** {report.run_id}")
-	lines.append(f"**Generated:** {report.generated_at}")
-	lines.append("")
-	lines.append("### Summary")
-	lines.append("| Metric | Count |")
-	lines.append("|--------|-------|")
-	lines.append(f"| Total drift items | {report.total_items} |")
-	lines.append(f"| Auto-resolved (safe) | {report.resolved_count} |")
-	lines.append(f"| Manual required (unsafe) | {report.unsafe_count} |")
-	lines.append("")
-
-	if report.pipeline_outcome == "resolved" and report.migration_name:
-		lines.append(f"✅ Migration `{report.migration_name}` was applied successfully.")
-		lines.append("")
-
-	if report.pipeline_outcome in {"unsafe_detected", "partial", "approval_pending", "execution_failed"} and report.unsafe_count > 0:
-		lines.append(f"⚠️ **{report.unsafe_count} unsafe change(s) require manual intervention.**")
-		lines.append("Check the drift-report artifact for full details and SQL.")
-		lines.append("")
-
-	lines.append("> Download the full drift report from the Actions artifacts.")
-	return "\n".join(lines)
-
-
 if __name__ == "__main__":
 	from drift_resolver.models.drift_item import DriftClassification, DriftItem
 	from drift_resolver.modules.executor import ExecutionResult
 	from drift_resolver.modules.generator import MigrationFile
-	from drift_resolver.modules.approval import ApprovalResult
 	from drift_resolver.modules.validator import ValidationResult
 
 	demo_items = [
@@ -255,7 +182,7 @@ if __name__ == "__main__":
 			column_name="bio",
 			classification=DriftClassification.SAFE,
 			reason="Adding a nullable column is safe — existing rows are unaffected",
-			rollback_sql='ALTER TABLE users DROP COLUMN bio;',
+			rollback_sql="ALTER TABLE users DROP COLUMN bio;",
 		),
 		DriftItem(
 			sql='CREATE INDEX "idx_users_email" ON "users"("email");',
@@ -263,7 +190,7 @@ if __name__ == "__main__":
 			table_name="users",
 			classification=DriftClassification.SAFE,
 			reason="Creating an index does not change data — safe",
-			rollback_sql='DROP INDEX IF EXISTS idx_users_email;',
+			rollback_sql="DROP INDEX IF EXISTS idx_users_email;",
 		),
 		DriftItem(
 			sql='CREATE TABLE "audit_logs" ("id" SERIAL PRIMARY KEY);',
@@ -271,7 +198,7 @@ if __name__ == "__main__":
 			table_name="audit_logs",
 			classification=DriftClassification.SAFE,
 			reason="Creating a new table does not affect existing data — safe",
-			rollback_sql='DROP TABLE IF EXISTS audit_logs;',
+			rollback_sql="DROP TABLE IF EXISTS audit_logs;",
 		),
 		DriftItem(
 			sql='ALTER TABLE "users" DROP COLUMN "password";',
@@ -290,12 +217,18 @@ if __name__ == "__main__":
 		),
 	]
 
-	approval = ApprovalResult(approved=True, mode="github_label", message="drift-approved label found on PR #123")
-	validation = ValidationResult(valid=True, validated_items=demo_items[:3], rejected_items=[], rejection_reasons={})
+	validation = ValidationResult(
+		valid=True,
+		validated_items=demo_items[:3],
+		rejected_items=[],
+		rejection_reasons={},
+	)
 	migration_file = MigrationFile(
 		folder_name="20260606000000_drift_auto_resolve",
 		folder_path=str(Path.cwd() / "prisma" / "migrations" / "20260606000000_drift_auto_resolve"),
-		sql_path=str(Path.cwd() / "prisma" / "migrations" / "20260606000000_drift_auto_resolve" / "migration.sql"),
+		sql_path=str(
+			Path.cwd() / "prisma" / "migrations" / "20260606000000_drift_auto_resolve" / "migration.sql"
+		),
 		sql_content="-- demo migration",
 		item_count=3,
 		created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -311,7 +244,6 @@ if __name__ == "__main__":
 	output_dir = Path.cwd()
 	report = generate_report(
 		demo_items,
-		approval_result=approval,
 		validation_result=validation,
 		migration_file=migration_file,
 		execution_result=execution_result,

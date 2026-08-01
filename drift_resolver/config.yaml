@@ -1,28 +1,27 @@
 safe_rules:
   - name: add_nullable_column
-    description: "Adding a column that allows NULL - no existing rows affected"
+    description: "Adding a column that allows NULL"
   - name: add_column_with_default
-    description: "Adding column with a default - existing rows get the default"
+    description: "Adding column with a default value"
   - name: change_column_default
-    description: "Changing a default value - only affects new inserts"
+    description: "Changing a default value"
   - name: create_index
-    description: "Creating an index - no data change"
+    description: "Creating an index"
   - name: create_table
-    description: "Creating a new table - nothing existing is touched"
+    description: "Creating a new table"
 
 unsafe_rules:
   - name: drop_column
-    description: "Dropping a column - permanent data loss"
+    description: "Dropping a column — permanent data loss"
   - name: drop_table
-    description: "Dropping a table - permanent data loss"
+    description: "Dropping a table — permanent data loss"
   - name: rename_column
     description: "Renaming breaks application queries"
   - name: change_column_type
     description: "Type change may corrupt data"
   - name: add_not_null_no_default
-    description: "Adding NOT NULL without default fails on existing rows"
+    description: "Adding NOT NULL without default"
 
 settings:
-  auto_approve: false
   migrations_dir: "./prisma/migrations"
   report_format: ["json", "html"]

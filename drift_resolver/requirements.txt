@@ -2,7 +2,7 @@ sqlglot
 pydantic>=2.0
 click
 pyyaml
-requests
 jinja2
 pytest
 python-dotenv
+psycopg2-binary

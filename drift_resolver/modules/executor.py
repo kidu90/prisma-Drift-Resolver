@@ -115,7 +115,7 @@ def execute_migration(migration_file: MigrationFile, db_url: str) -> ExecutionRe
 			return_code=completed.returncode,
 		)
 
-	print(f"[EXECUTOR] Migration applied successfully: {migration_file.folder_name}")
+	print("[EXECUTOR] ✓ Migration applied successfully.")
 	return ExecutionResult(
 		success=True,
 		error_message=None,
@@ -131,7 +131,7 @@ def execute_migration(migration_file: MigrationFile, db_url: str) -> ExecutionRe
 def verify_migration_applied(migration_name: str, db_url: str, schema_path: str = "./prisma/schema.prisma") -> None:
 	"""Confirm that Prisma reports the database as up to date after deployment."""
 
-	print(f"[EXECUTOR] Verifying migration: {migration_name}")
+	print("[EXECUTOR] Verifying migration in _prisma_migrations...")
 	command = [_npx_command(), "prisma", "migrate", "status", "--schema", schema_path]
 	env = os.environ.copy()
 	env["DATABASE_URL"] = db_url
@@ -154,7 +154,7 @@ def verify_migration_applied(migration_name: str, db_url: str, schema_path: str 
 	if "up to date" not in status_output and "not in sync" in status_output:
 		raise RuntimeError(f"Migration verification did not confirm success for {migration_name}.")
 
-	print(f"[EXECUTOR] Verification passed for {migration_name}")
+	print("[EXECUTOR] ✓ Verified.")
 
 
 def _npx_command() -> str:

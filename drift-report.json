@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "run_id": "303d2895-aee4-4342-b1dc-1d76bb242961",
   "generated_at": "2026-06-12T11:37:06.967055Z",
   "total_items": 1,
@@ -23,4 +24,41 @@
   ],
   "unsafe_items_detail": [],
   "pipeline_outcome": "resolved"
+=======
+  "run_id": "432d87d0-751e-4b9b-8d9e-8e64bacb59fc",
+  "generated_at": "2026-07-23T04:00:01.934133Z",
+  "total_items": 1,
+  "safe_count": 0,
+  "unsafe_count": 1,
+  "resolved_count": 0,
+  "rejected_count": 0,
+  "approval_mode": "none",
+  "migration_name": null,
+  "execution_success": null,
+  "all_items": [
+    {
+      "sql": "DROP TABLE \"Category\"",
+      "statement_type": "DropTable",
+      "table_name": "Category",
+      "column_name": null,
+      "classification": "UNSAFE",
+      "reason": "Dropping a table permanently deletes all its data \u2014 manual review required",
+      "auto_resolved": false,
+      "rollback_sql": null
+    }
+  ],
+  "unsafe_items_detail": [
+    {
+      "sql": "DROP TABLE \"Category\"",
+      "statement_type": "DropTable",
+      "table_name": "Category",
+      "column_name": null,
+      "classification": "UNSAFE",
+      "reason": "Dropping a table permanently deletes all its data \u2014 manual review required",
+      "auto_resolved": false,
+      "rollback_sql": null
+    }
+  ],
+  "pipeline_outcome": "unsafe_detected"
+>>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
 }
