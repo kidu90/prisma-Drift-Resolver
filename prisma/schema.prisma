@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,11 +8,7 @@ datasource db {
 }
 
 model User {
-<<<<<<< HEAD
-  id    Int    @id @default(autoincrement())
-=======
   id    Int     @id @default(autoincrement())
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
   name  String
   age   Int
   email String  @unique
@@ -21,16 +16,6 @@ model User {
 }
 
 model Product {
-<<<<<<< HEAD
-  id    Int @id @default(autoincrement())
-  name  String
-}
-
-model Category {
-  id    Int    @id @default(autoincrement())
-  name  String
-=======
   id   Int    @id @default(autoincrement())
   name String
->>>>>>> 946b42b (refactor: remove approval gate, connect to GitHub Actions)
 }
