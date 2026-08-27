@@ -41,6 +41,8 @@ class DriftReport:
 	all_items: list[dict]
 	unsafe_items_detail: list[dict]
 	pipeline_outcome: str
+	notification_sent: bool = False
+	notification_recipient: str = ""
 
 
 def generate_report(
@@ -49,6 +51,8 @@ def generate_report(
 	migration_file: Optional[MigrationFile] = None,
 	execution_result: Optional[ExecutionResult] = None,
 	report_dir: str = ".",
+	notification_sent: bool = False,
+	notification_recipient: str = "",
 ) -> DriftReport:
 	"""Build a report and write the JSON and HTML artifacts."""
 
@@ -69,6 +73,8 @@ def generate_report(
 			if item.classification == DriftClassification.UNSAFE
 		],
 		pipeline_outcome=_determine_pipeline_outcome(all_items, execution_result),
+		notification_sent=notification_sent,
+		notification_recipient=notification_recipient,
 	)
 
 	json_path = _write_json_report(report, report_dir)

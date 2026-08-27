@@ -113,6 +113,10 @@ jobs:
             --db-url "postgresql://testuser:testpass@localhost:5432/testdb"
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+          NOTIFY_EMAIL_FROM: ${{ secrets.NOTIFY_EMAIL_FROM }}
+          NOTIFY_EMAIL_PASSWORD: ${{ secrets.NOTIFY_EMAIL_PASSWORD }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          NOTIFY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
 
       - name: Confirm drift was resolved
         if: success()

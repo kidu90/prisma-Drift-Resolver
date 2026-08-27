@@ -19,3 +19,6 @@ sqlglot==29.0.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.6.3
+
+# Note: email notifications use Python stdlib
+# smtplib and email.mime — no extra install needed

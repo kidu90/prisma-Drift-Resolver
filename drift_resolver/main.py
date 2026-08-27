@@ -12,6 +12,7 @@ try:
     from drift_resolver.modules.config_loader import load_config
     from drift_resolver.modules.executor import ExecutionResult, execute_migration, verify_migration_applied
     from drift_resolver.modules.generator import MigrationFile, generate_migration
+    from drift_resolver.modules.notifier import check_email_config, send_failure_notification
     from drift_resolver.modules.parser import parse_drift_sql
     from drift_resolver.modules.reporter import DriftReport, generate_report
     from drift_resolver.modules.validator import ValidationResult, validate_safe_items
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
     from drift_resolver.modules.config_loader import load_config
     from drift_resolver.modules.executor import ExecutionResult, execute_migration, verify_migration_applied
     from drift_resolver.modules.generator import MigrationFile, generate_migration
+    from drift_resolver.modules.notifier import check_email_config, send_failure_notification
     from drift_resolver.modules.parser import parse_drift_sql
     from drift_resolver.modules.reporter import DriftReport, generate_report
     from drift_resolver.modules.validator import ValidationResult, validate_safe_items
@@ -43,14 +45,15 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
     execution: ExecutionResult | None = None
     report: DriftReport | None = None
     config: dict | None = None
+    resolved_db_url = db_url or os.environ.get("DATABASE_URL", "")
 
     try:
         # STEP 1 — Load config
         print("[MAIN] STEP 1 — Load config")
         config = load_config()
         print("[MAIN] Config loaded.")
+        check_email_config()
 
-        resolved_db_url = db_url or os.environ.get("DATABASE_URL", "")
         if not resolved_db_url:
             raise ValueError("Database URL is required. Set DATABASE_URL or pass --db-url.")
 
@@ -118,7 +121,34 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
         execution = execute_migration(migration_file, resolved_db_url)
         if not execution.success:
             print(f"[MAIN] Execution failed: {execution.error_message}")
-            report = generate_report(items, validation, migration_file, execution, report_dir=report_path)
+
+            # Read the migration SQL content for the email
+            migration_sql = ""
+            try:
+                with open(migration_file.sql_path, "r", encoding="utf-8") as sql_file:
+                    migration_sql = sql_file.read()
+            except Exception:
+                migration_sql = "Could not read migration SQL file."
+
+            # Send failure notification to admin
+            notify_result = send_failure_notification(
+                failure_type="EXECUTION_FAILED",
+                migration_name=migration_file.folder_name,
+                error_message=execution.error_message or "prisma migrate deploy failed",
+                sql_content=migration_sql,
+                db_url=resolved_db_url,
+                all_items=items,
+            )
+
+            report = generate_report(
+                items,
+                validation,
+                migration_file,
+                execution,
+                report_dir=report_path,
+                notification_sent=notify_result.sent,
+                notification_recipient=", ".join(notify_result.recipients),
+            )
             sys.exit(1)
 
         # STEP 11 — Verify migration applied
@@ -141,8 +171,25 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
         raise
     except Exception as exc:
         print(f"[MAIN] Unhandled error: {exc}")
+        import traceback
+
+        traceback.print_exc()
+
+        notify_result = send_failure_notification(
+            failure_type="TOOL_ERROR",
+            migration_name="unknown",
+            error_message=f"{type(exc).__name__}: {str(exc)}\n\n{traceback.format_exc()}",
+            sql_content="",
+            db_url=resolved_db_url or "not available",
+        )
+
         try:
-            generate_report(items, report_dir=report_path)
+            generate_report(
+                items,
+                report_dir=report_path,
+                notification_sent=notify_result.sent,
+                notification_recipient=", ".join(notify_result.recipients),
+            )
         except Exception as report_exc:
             print(f"[MAIN] Failed to generate recovery report: {report_exc}")
         sys.exit(3)
