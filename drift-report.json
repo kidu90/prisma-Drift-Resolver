@@ -1,6 +1,6 @@
 {
-  "run_id": "f74f17f2-034d-420b-a393-814c9e20e9f1",
-  "generated_at": "2026-08-01T16:18:58.679654Z",
+  "run_id": "9558d1eb-74fa-4e9a-96ee-27c2d166bce3",
+  "generated_at": "2026-08-28T15:19:14.525286Z",
   "total_items": 0,
   "safe_count": 0,
   "unsafe_count": 0,
@@ -10,5 +10,7 @@
   "execution_success": null,
   "all_items": [],
   "unsafe_items_detail": [],
-  "pipeline_outcome": "no_drift"
+  "pipeline_outcome": "no_drift",
+  "notification_sent": false,
+  "notification_recipient": ""
 }

@@ -6,6 +6,7 @@ jinja2
 pytest
 python-dotenv
 psycopg2-binary
+requests
 
 # Note: email notifications use Python stdlib
 # smtplib and email.mime — no extra install needed

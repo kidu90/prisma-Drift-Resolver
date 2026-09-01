@@ -25,3 +25,4 @@ unsafe_rules:
 settings:
   migrations_dir: "./prisma/migrations"
   report_format: ["json", "html"]
+  auto_approve: false

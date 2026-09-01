@@ -1,18 +1,20 @@
-name: Drift Resolver CI Test
+name: Drift Resolver — PR Approval Gate
 
 on:
-  push:
+  pull_request:
     branches: [main]
-  workflow_dispatch:
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: write
+  pull-requests: write
+  issues: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  drift-check:
+  drift-approval:
     runs-on: ubuntu-latest
 
     services:
@@ -75,47 +77,42 @@ jobs:
           echo "Do not ADD bio to the DB — that would remove the drift."
           PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
             -c '\d "User"'
-          echo "Safe drift present."
 
-      - name: Run drift-resolver (AUTO_APPROVE mode)
+      - name: Run drift-resolver with approval gate
         run: |
           python drift_resolver/main.py \
             --schema ./prisma/schema.prisma \
             --db-url "postgresql://testuser:testpass@localhost:5432/testdb"
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
-          AUTO_APPROVE: 'true'
+          AUTO_APPROVE: 'false'
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           NOTIFY_EMAIL_FROM: ${{ secrets.NOTIFY_EMAIL_FROM }}
           NOTIFY_EMAIL_PASSWORD: ${{ secrets.NOTIFY_EMAIL_PASSWORD }}
           NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
           NOTIFY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
 
-      - name: Confirm resolution
+      - name: Confirm drift resolved (only runs if approved)
         if: success()
         run: |
           npx prisma migrate status
-          PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
-            -c 'SELECT migration_name, finished_at FROM "_prisma_migrations"
-                ORDER BY finished_at DESC LIMIT 5;'
           PGPASSWORD=testpass psql -h localhost -U testuser -d testdb \
             -c '\d "User"'
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
 
-      - name: Show report
-        if: always()
-        run: cat drift-report.json 2>/dev/null || echo "No report."
-
-      - name: Clean up drift migrations
-        if: always()
-        run: rm -rf prisma/migrations/*_drift_auto_resolve
-
       - name: Upload drift report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: drift-report-${{ github.run_number }}
+          name: drift-report-pr-${{ github.event.pull_request.number }}-run-${{ github.run_number }}
           path: |
             drift-report.json
             drift-report.html
           if-no-files-found: warn
+
+      - name: Clean up drift migrations
+        if: always()
+        run: rm -rf prisma/migrations/*_drift_auto_resolve

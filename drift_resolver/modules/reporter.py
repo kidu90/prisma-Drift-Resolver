@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 try:
 	from drift_resolver.models.drift_item import DriftClassification, DriftItem
+	from drift_resolver.modules.approval import ApprovalResult
 	from drift_resolver.modules.executor import ExecutionResult
 	from drift_resolver.modules.generator import MigrationFile
 	from drift_resolver.modules.validator import ValidationResult
@@ -20,6 +21,7 @@ except ModuleNotFoundError:
 	if str(project_root) not in sys.path:
 		sys.path.insert(0, str(project_root))
 	from drift_resolver.models.drift_item import DriftClassification, DriftItem
+	from drift_resolver.modules.approval import ApprovalResult
 	from drift_resolver.modules.executor import ExecutionResult
 	from drift_resolver.modules.generator import MigrationFile
 	from drift_resolver.modules.validator import ValidationResult
@@ -43,6 +45,8 @@ class DriftReport:
 	pipeline_outcome: str
 	notification_sent: bool = False
 	notification_recipient: str = ""
+	approval_mode: str = ""
+	approval_message: str = ""
 
 
 def generate_report(
@@ -53,6 +57,7 @@ def generate_report(
 	report_dir: str = ".",
 	notification_sent: bool = False,
 	notification_recipient: str = "",
+	approval_result: Optional[ApprovalResult] = None,
 ) -> DriftReport:
 	"""Build a report and write the JSON and HTML artifacts."""
 
@@ -75,6 +80,8 @@ def generate_report(
 		pipeline_outcome=_determine_pipeline_outcome(all_items, execution_result),
 		notification_sent=notification_sent,
 		notification_recipient=notification_recipient,
+		approval_mode=approval_result.mode if approval_result else "",
+		approval_message=approval_result.message if approval_result else "",
 	)
 
 	json_path = _write_json_report(report, report_dir)

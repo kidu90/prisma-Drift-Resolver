@@ -8,6 +8,7 @@ import click
 
 try:
     from drift_resolver.modules.acquisition import get_prisma_drift
+    from drift_resolver.modules.approval import ApprovalResult, check_approval
     from drift_resolver.modules.classifier import classify_drift_items
     from drift_resolver.modules.config_loader import load_config
     from drift_resolver.modules.executor import ExecutionResult, execute_migration, verify_migration_applied
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     from drift_resolver.modules.acquisition import get_prisma_drift
+    from drift_resolver.modules.approval import ApprovalResult, check_approval
     from drift_resolver.modules.classifier import classify_drift_items
     from drift_resolver.modules.config_loader import load_config
     from drift_resolver.modules.executor import ExecutionResult, execute_migration, verify_migration_applied
@@ -37,7 +39,7 @@ except ModuleNotFoundError:
 @click.option("--report-path", "report_path", default=".", show_default=True, help="Directory for report artifacts")
 @click.option("--dry-run", is_flag=True, default=False, help="Detect and classify drift without applying changes")
 def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) -> None:
-    """Run the full drift-resolver pipeline (fully automatic for safe changes)."""
+    """Run the full drift-resolver pipeline with an optional PR approval gate."""
 
     items: list = []
     validation: ValidationResult | None = None
@@ -45,6 +47,7 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
     execution: ExecutionResult | None = None
     report: DriftReport | None = None
     config: dict | None = None
+    approval: ApprovalResult | None = None
     resolved_db_url = db_url or os.environ.get("DATABASE_URL", "")
 
     try:
@@ -103,21 +106,40 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
             report = generate_report(items, report_dir=report_path)
             sys.exit(0)
 
-        # STEP 8 — Validate safe items (applied automatically)
-        print("[MAIN] STEP 8 — Validate")
+        # STEP 8 — Approval gate
+        print("[MAIN] STEP 8 — Approval gate")
+        approval = check_approval(safe_items)
+
+        if not approval.approved:
+            # This should not be reached because check_approval
+            # calls sys.exit(2) internally when not approved.
+            # But handle it defensively anyway.
+            print("[MAIN] Approval not granted. Exiting.")
+            generate_report(items, report_dir=report_path, approval_result=approval)
+            sys.exit(2)
+
+        print(f"[MAIN] Approval granted via mode: {approval.mode}")
+
+        # STEP 9 — Validate safe items (applied automatically)
+        print("[MAIN] STEP 9 — Validate")
         validation = validate_safe_items(safe_items)
         if not validation.valid and not validation.validated_items:
             print("[MAIN] All safe items failed validation.")
-            report = generate_report(items, validation, report_dir=report_path)
+            report = generate_report(
+                items,
+                validation,
+                report_dir=report_path,
+                approval_result=approval,
+            )
             sys.exit(1)
 
-        # STEP 9 — Generate migration file
-        print("[MAIN] STEP 9 — Generate migration file")
+        # STEP 10 — Generate migration file
+        print("[MAIN] STEP 10 — Generate migration file")
         migrations_dir = config["settings"]["migrations_dir"] if config else "./prisma/migrations"
         migration_file = generate_migration(validation.validated_items, migrations_dir=migrations_dir)
 
-        # STEP 10 — Execute migration
-        print("[MAIN] STEP 10 — Execute migration")
+        # STEP 11 — Execute migration
+        print("[MAIN] STEP 11 — Execute migration")
         execution = execute_migration(migration_file, resolved_db_url)
         if not execution.success:
             print(f"[MAIN] Execution failed: {execution.error_message}")
@@ -148,19 +170,27 @@ def main(schema_path: str, db_url: str | None, report_path: str, dry_run: bool) 
                 report_dir=report_path,
                 notification_sent=notify_result.sent,
                 notification_recipient=", ".join(notify_result.recipients),
+                approval_result=approval,
             )
             sys.exit(1)
 
-        # STEP 11 — Verify migration applied
-        print("[MAIN] STEP 11 — Verify")
+        # STEP 12 — Verify migration applied
+        print("[MAIN] STEP 12 — Verify")
         verify_migration_applied(migration_file.folder_name, resolved_db_url)
 
-        # STEP 12 — Generate final report
-        print("[MAIN] STEP 12 — Generate final report")
-        report = generate_report(items, validation, migration_file, execution, report_dir=report_path)
+        # STEP 13 — Generate final report
+        print("[MAIN] STEP 13 — Generate final report")
+        report = generate_report(
+            items,
+            validation,
+            migration_file,
+            execution,
+            report_dir=report_path,
+            approval_result=approval,
+        )
 
-        # STEP 13 — Final exit
-        print("[MAIN] STEP 13 — Final exit")
+        # STEP 14 — Final exit
+        print("[MAIN] STEP 14 — Final exit")
         if unsafe_items:
             print("[MAIN] Completed with unsafe items requiring manual review.")
             sys.exit(1)
