@@ -34,6 +34,23 @@ def classify_drift_items(items: list[DriftItem]) -> list[DriftItem]:
 	return items
 
 
+def _print_classified_items(items: list[DriftItem]) -> None:
+	"""Print only the statements detected in this run."""
+
+	if not items:
+		print("[CLASSIFIER] No drift statements to classify.")
+		return
+
+	print()
+	for index, item in enumerate(items, start=1):
+		print(f"[CLASSIFIER] Detected {index}/{len(items)}")
+		print(f"  SQL:            {item.sql}")
+		print(f"  statement_type: {item.statement_type}")
+		print(f"  classification: {item.classification.value}")
+		print(f"  reason:         {item.reason}")
+		print()
+
+
 def _classify_single(item: DriftItem) -> DriftItem:
 	"""Classify one drift item using ordered rules and fallbacks."""
 
@@ -247,6 +264,56 @@ def _build_rollback(item: DriftItem) -> Optional[str]:
 	return None
 
 
+def _load_detected_sql() -> str:
+	"""Load SQL for this run: live prisma diff, a file argument, or stdin."""
+
+	try:
+		from dotenv import load_dotenv
+
+		load_dotenv()
+	except ImportError:
+		pass
+
+	if len(sys.argv) > 1:
+		sql_path = Path(sys.argv[1])
+		if not sql_path.is_file():
+			print(f"[CLASSIFIER] SQL file not found: {sql_path}")
+			sys.exit(2)
+		print(f"[CLASSIFIER] Classifying detected SQL from {sql_path}")
+		return sql_path.read_text(encoding="utf-8")
+
+	import os
+
+	db_url = os.environ.get("DATABASE_URL", "")
+	if db_url:
+		try:
+			from drift_resolver.modules.acquisition import get_prisma_drift
+		except ModuleNotFoundError:
+			project_root = Path(__file__).resolve().parents[2]
+			if str(project_root) not in sys.path:
+				sys.path.insert(0, str(project_root))
+			from drift_resolver.modules.acquisition import get_prisma_drift
+
+		result = get_prisma_drift(db_url=db_url)
+		if result.error:
+			print(f"[CLASSIFIER] Acquisition failed: {result.error}")
+			sys.exit(3)
+		if not result.has_drift:
+			print("[CLASSIFIER] No drift detected. Database is in sync.")
+			sys.exit(0)
+		return result.raw_sql
+
+	if not sys.stdin.isatty():
+		print("[CLASSIFIER] Classifying detected SQL from stdin")
+		return sys.stdin.read()
+
+	print(
+		"[CLASSIFIER] No detected drift SQL. Set DATABASE_URL, pass a .sql file, "
+		"or pipe prisma migrate diff output on stdin."
+	)
+	sys.exit(2)
+
+
 if __name__ == "__main__":
 	try:
 		from drift_resolver.modules.parser import parse_drift_sql
@@ -256,42 +323,11 @@ if __name__ == "__main__":
 			sys.path.insert(0, str(project_root))
 		from drift_resolver.modules.parser import parse_drift_sql
 
-	safe_fixture = Path("drift_resolver/tests/fixtures/safe_drift.sql")
-	unsafe_fixture = Path("drift_resolver/tests/fixtures/unsafe_drift.sql")
+	detected_sql = _load_detected_sql()
+	items = parse_drift_sql(detected_sql)
+	if not items:
+		print("[CLASSIFIER] Parser found no statements in the detected SQL.")
+		sys.exit(0)
 
-	safe_sql = safe_fixture.read_text(encoding="utf-8")
-	unsafe_sql = unsafe_fixture.read_text(encoding="utf-8")
-
-	safe_items = parse_drift_sql(safe_sql)
-	unsafe_items = parse_drift_sql(unsafe_sql)
-	combined_items = safe_items + unsafe_items
-
-	classify_drift_items(combined_items)
-
-	headers = ["SQL", "statement_type", "classification", "reason"]
-	rows: list[list[str]] = []
-	for item in combined_items:
-		rows.append(
-			[
-				item.sql,
-				item.statement_type,
-				item.classification.value,
-				item.reason,
-			]
-		)
-
-	widths = [len(header) for header in headers]
-	for row in rows:
-		for idx, value in enumerate(row):
-			widths[idx] = max(widths[idx], len(value))
-
-	separator = " | ".join("-" * width for width in widths)
-	print()
-	print(" | ".join(headers[idx].ljust(widths[idx]) for idx in range(len(headers))))
-	print(separator)
-	for row in rows:
-		print(" | ".join(row[idx].ljust(widths[idx]) for idx in range(len(headers))))
-
-	safe_count = sum(1 for item in combined_items if item.classification == DriftClassification.SAFE)
-	unsafe_count = sum(1 for item in combined_items if item.classification == DriftClassification.UNSAFE)
-	print(f"\n[CLASSIFIER] Expected SAFE=5, UNSAFE=5 | Actual SAFE={safe_count}, UNSAFE={unsafe_count}")
+	classify_drift_items(items)
+	_print_classified_items(items)
