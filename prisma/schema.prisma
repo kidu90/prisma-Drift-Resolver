@@ -19,3 +19,11 @@ model Product {
   id   Int    @id @default(autoincrement())
   name String
 }
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  total     Float
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+}
